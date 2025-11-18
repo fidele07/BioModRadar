@@ -31,6 +31,7 @@ def read_radar_data(file_path, sweeps=None,
         else:
             raise TypeError(f'Unknown volume_type {volume_type}')
     except Exception as e:
+        print(e)
         print(f'Enable to read: {file_path}')
         return None
 
@@ -100,7 +101,8 @@ def _reduce_sweeps_nexrad_level2(radar):
     for j in range(len(repl[0])):
         iold = repl[0][j]
         inew = repl[1][j]
-        for field in ['REF', 'VEL', 'SW']:
+        # for field in ['REF', 'VEL', 'SW']:
+        for field in ['VEL', 'SW']:
             field_data = _interp_sweeps_nexrad_level2(
                     radar.range['data'],
                     radar.azimuth['data'][iold],

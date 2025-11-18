@@ -30,3 +30,4 @@ arm_pyart
 metpy
 pydda
 getgfs
+openpyxl
