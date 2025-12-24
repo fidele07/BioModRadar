@@ -15,6 +15,8 @@ pandas
 geopandas
 pint
 gdal==3.8.4
+#mac
+#gdal==3.9.2
 scikit-learn
 scikit-image
 scikit-fuzzy

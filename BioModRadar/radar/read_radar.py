@@ -5,6 +5,9 @@ import pyart
 def read_radar_data(file_path, sweeps=None,
                     volume_type='cfradial',
                     fields_dict=None):
+    # sweeps = [0, 1, 2, 3, 4, 5]
+    # fields_dict = {'ref': 'REF', 'zdr': 'ZDR', 'rho': 'RHO',
+    #                'phi': 'PHI', 'vel': 'VEL', 'sw': 'SW'}
     try:
         if volume_type == 'cfradial':
             radar = pyart.io.read_cfradial(file_path,
@@ -56,21 +59,21 @@ def read_radar_data(file_path, sweeps=None,
             if len(delete_fields) > 0:
                 for fl in delete_fields:
                     del radar.fields[fl]
-
     return radar
 
 def _reduce_sweeps_rwanda_odim_hdf5(radar):
     keep = np.arange(radar.nsweeps - 3)
     radar = radar.extract_sweeps(sweeps=keep)
-    fields = ['DBZH', 'RHOHV', 'PHIDP', 'ZDR',
-              'VRADH', 'WRADH', 'KDP']
-    # fields = list(radar.fields.keys())
+    fields = list(radar.fields.keys())
     radar = pyart.util.subset_radar(
         radar,
         field_names=fields,
         ele_min=0.5,
         ele_max=32.
     )
+    sweep_number = radar.sweep_number['data']
+    sweep_number = np.sort(sweep_number)
+    radar.sweep_number['data'] = sweep_number
     return radar
 
 def _reduce_sweeps_nexrad_level2(radar):
