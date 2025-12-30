@@ -21,5 +21,5 @@ def grid_radar_data(radar, fields, gridding_algo='map_gates_to_grid',
                 gridding_algo=gridding_algo,
                 weighting_function=weighting_function,
                 min_radius=min_radius, **kwargs)
-    grid.time['data'] = np.array([radar.time['data'][-1]])
+    # grid.time['data'] = np.array([radar.time['data'][-1]])
     return grid
