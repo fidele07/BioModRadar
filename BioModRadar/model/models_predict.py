@@ -1,6 +1,7 @@
 import os
 import re
 import copy
+import warnings
 import numpy as np
 import pandas as pd
 import joblib
@@ -67,19 +68,43 @@ def predict_fuzzy_logic(radar, features, file_stats_bird, file_stats_insect, fie
 
     return radar_c
 
-def predict_ML_models(radar, features, file_model):
+def predict_ML_models(radar, features, file_model, prob_thres=None):
+    """Classify biological gates as insect (0) or bird (1).
+
+    Parameters
+    ----------
+    prob_thres: float or None, optional
+        Minimum class probability (0.5-1.0) required to keep a
+        prediction. Gates below the threshold are masked (transparent)
+        instead of being painted with a low-confidence class. Only
+        applied when the model supports ``predict_proba``
+        (RandomForest, DecisionTree); ignored for RidgeClassifier.
+        ``None`` (default) keeps every prediction. The output remains
+        strictly 2-class: insect=0, bird=1, everything else masked.
+    """
     if not os.path.exists(file_model):
        raise FileNotFoundError(f'File containing the ML model not found.')
 
     model = joblib.load(file_model)
+    features = _align_features_order(features, model.get('features'))
     data = np.array([radar.fields[f]['data'].filled(np.nan).ravel() for f in features]).T
     if model['scaler'] is not None:
-        data = model['scaler'].fit_transform(data)
+        # transform (NOT fit_transform): the scaler must keep the
+        # mean/std learned from the training data, otherwise every
+        # scan is re-centered onto the training centroid and the
+        # classification becomes relative-within-scan (systematic bias).
+        data = model['scaler'].transform(data)
 
     pred = np.full(data.shape[0], 2, dtype=np.int16)
     mask = _mask_data_ML(data)
     if np.any(mask):
         pred[mask] = model['model'].predict(data[mask])
+        if prob_thres is not None and hasattr(model['model'], 'predict_proba'):
+            proba = model['model'].predict_proba(data[mask])
+            conf = proba.max(axis=1)
+            pred_m = pred[mask]
+            pred_m[conf < prob_thres] = 2
+            pred[mask] = pred_m
     pred = pred.reshape(radar.fields['DR']['data'].shape)
     pred = np.ma.masked_where(pred == 2, pred)
 
@@ -99,6 +124,36 @@ def predict_ML_models(radar, features, file_model):
     radar_c.add_field('BIO_CLASS', bio_class_dict, replace_existing=True)
 
     return radar_c
+
+def _align_features_order(features, model_features):
+    """Ensure the feature matrix columns match the training order.
+
+    The model was fitted on ``model_features`` in a fixed order.
+    If the caller supplies the same names in a different order,
+    reorder them. If the names differ (e.g. different radar field
+    naming), assume the caller provides them positionally in the
+    training order, and warn.
+    """
+    if model_features is None:
+        return list(features)
+    model_features = list(model_features)
+    features = list(features)
+    if len(model_features) != len(features):
+        raise ValueError(
+            'Number of features does not match the trained model: '
+            f'model expects {len(model_features)} features '
+            f'({", ".join(model_features)}), got {len(features)} '
+            f'({", ".join(features)}).'
+        )
+    if set(model_features) == set(features):
+        return model_features
+    warnings.warn(
+        'Feature names differ from the trained model '
+        f'(model: {", ".join(model_features)}; '
+        f'supplied: {", ".join(features)}). Assuming the supplied '
+        'features are already ordered as in training.'
+    )
+    return features
 
 def _mask_data_ML(data):
     mask_2d = ~np.isnan(data)

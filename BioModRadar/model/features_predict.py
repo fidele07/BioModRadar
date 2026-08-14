@@ -118,6 +118,11 @@ def build_features_predict(file_path, volume_type,
     if radar is None:
         raise Exception(f'Enable to read: {file_path}')
 
+    # the returned radar contains only the extracted sweeps (re-indexed
+    # from 0); scans with fewer sweeps than requested would otherwise
+    # crash downstream with "invalid sweeps indices"
+    sweeps = np.arange(radar.nsweeps)
+
     radar = mask_gates_outside_ranges(radar, 1000., 300000.)
     radar = depolarization_ratio(radar, sweeps,
                                  fields_dict['zdr'],

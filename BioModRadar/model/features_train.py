@@ -147,8 +147,12 @@ def build_features_table_train(dir_radar, file_format,
         radar = read_radar_data(file_path, sweeps, volume_type, fields_dict)
         if radar is None: continue
 
+        # the returned radar contains only the extracted sweeps
+        # (re-indexed from 0)
+        sweeps_r = np.arange(radar.nsweeps)
+
         radar = mask_gates_outside_ranges(radar, 1000., 300000.)
-        radar = depolarization_ratio(radar, sweeps,
+        radar = depolarization_ratio(radar, sweeps_r,
                                      fields_dict['zdr'],
                                      fields_dict['rho'],
                                      fields_dict['ref'],
@@ -191,9 +195,9 @@ def build_features_table_train(dir_radar, file_format,
             field_tex2 = [f'{k}_TEX' for k in field_med]
 
         fields = field_list + field_med + field_tex1 + field_tex2
-        insect_data = create_feature_table_bboxs(radar, sweeps, fields, d['insect'])
+        insect_data = create_feature_table_bboxs(radar, sweeps_r, fields, d['insect'])
         insect_data['label'] = 0
-        bird_data = create_feature_table_bboxs(radar, sweeps, fields, d['bird'])
+        bird_data = create_feature_table_bboxs(radar, sweeps_r, fields, d['bird'])
         bird_data['label'] = 1
         scan_data = pd.concat([bird_data, insect_data])
         df_data += [scan_data]

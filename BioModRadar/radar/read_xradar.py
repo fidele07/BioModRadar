@@ -4,7 +4,11 @@ import numpy as np
 import xarray as xr
 import xradar as xd
 
-xr.set_options(use_new_combine_kwarg_defaults=True)
+try:
+    xr.set_options(use_new_combine_kwarg_defaults=True)
+except ValueError:
+    # option only exists in newer xarray versions
+    pass
 
 def read_xradar_data(file_path, sweeps=None,
                      volume_type='cfradial',

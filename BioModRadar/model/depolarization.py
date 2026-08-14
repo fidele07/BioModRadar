@@ -20,8 +20,13 @@ def depolarization_ratio(radar, sweeps, zdr_field, rho_field, ref_field,
                                            blob_min_size, blob_connectivity)
         ref = np.ma.masked_array(ref, mask=mask_ref.fields['blob_mask']['data'])
 
-    dr_n = (zdr + 1 - 2 * np.power(zdr, 0.5) * rho)
-    dr_d = (zdr + 1 + 2 * np.power(zdr, 0.5) * rho)
+    # ZDR is in dB; the depolarization ratio formula requires the
+    # linear differential reflectivity. Using dB directly makes
+    # sqrt(zdr) invalid for negative ZDR (common for birds), masking
+    # those gates and preferentially removing bird echoes.
+    zdr_lin = np.ma.power(10., zdr / 10.)
+    dr_n = (zdr_lin + 1 - 2 * np.ma.sqrt(zdr_lin) * rho)
+    dr_d = (zdr_lin + 1 + 2 * np.ma.sqrt(zdr_lin) * rho)
     dr = 10 * np.log10(dr_n/dr_d)
     radar.add_field_like(ref_field, 'DR', dr, replace_existing=True)
 
@@ -56,8 +61,9 @@ def compute_dr(radar, zdr_field, rho_field):
     rho = radar.fields[rho_field]['data'].copy()
     zdr = np.ma.masked_where(np.isnan(zdr), zdr)
     rho = np.ma.masked_where(np.isnan(rho), rho)
-    dr_n = (zdr + 1 - 2 * np.power(zdr, 0.5) * rho)
-    dr_d = (zdr + 1 + 2 * np.power(zdr, 0.5) * rho)
+    zdr_lin = np.ma.power(10., zdr / 10.)
+    dr_n = (zdr_lin + 1 - 2 * np.ma.sqrt(zdr_lin) * rho)
+    dr_d = (zdr_lin + 1 + 2 * np.ma.sqrt(zdr_lin) * rho)
     dr = 10 * np.log10(dr_n/dr_d)
     radar.add_field_like(zdr_field, 'DR', dr, replace_existing=True)
     return radar

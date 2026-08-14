@@ -54,7 +54,7 @@ def membership_fuzzy_stats(data, fields):
         x = data[f]
         mean = np.nanmean(x)
         std = np.nanstd(x)
-        sigma = 1.06 * std * len(x)**(1/5)
+        sigma = 1.06 * std * len(x)**(-1/5)
         stats[f] = {'mean': np.round(mean, 4),
                     'std': np.round(std, 4),
                     'sigma': np.round(sigma, 4)}
@@ -64,7 +64,7 @@ def membership_fuzzy_train(data):
     mean = data.mean(axis=0)
     std = data.std(axis=0)
     n = data.shape[0]
-    sigma = 1.06 * std * n**(1/5)
+    sigma = 1.06 * std * n**(-1/5)
     return {'mean': mean,
             'std': std,
             'sigma': sigma}
