@@ -1,6 +1,42 @@
+import warnings
 import numpy as np
 from scipy import ndimage as ndi
 import pyart
+
+from .texture import (compute_ndimage_median, compute_ndimage_mean,
+                      compute_texture_ndimage_stdev)
+
+# Window callbacks with a vectorized NaN-aware equivalent. The per-gate
+# generic_filter callback path costs minutes per sweep; the vectorized
+# path computes the same result in well under a second.
+_VECTORIZED_STATS = {
+    compute_ndimage_median: np.nanmedian,
+    compute_ndimage_mean: np.nanmean,
+    compute_texture_ndimage_stdev: np.nanstd,
+}
+
+def _windowed_stat_vectorized(tmp, pad, wind_size, nan_reduce, min_gates):
+    """Vectorized equivalent of the compute_ndimage_* window callbacks:
+    NaN when the center gate is NaN or fewer than min_gates valid values
+    fall in the window; otherwise the reduction over valid values."""
+    windows = np.lib.stride_tricks.sliding_window_view(tmp, wind_size)
+    center = tmp[pad:-pad, pad:-pad]
+    count = np.sum(~np.isnan(windows), axis=(-2, -1))
+    if nan_reduce is np.nanmedian:
+        # sort-based median of valid values: NaNs sort to the end, so the
+        # median of the first `count` sorted values is the nanmedian —
+        # much faster than np.nanmedian on windowed views
+        flat = np.sort(windows.reshape(*count.shape, -1), axis=-1)
+        c = np.maximum(count, 1)
+        lo = np.take_along_axis(flat, ((c - 1) // 2)[..., None], axis=-1)[..., 0]
+        hi = np.take_along_axis(flat, (c // 2)[..., None], axis=-1)[..., 0]
+        res = (lo + hi) / 2.0
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            res = nan_reduce(windows, axis=(-2, -1))
+    res[np.isnan(center) | (count < min_gates)] = np.nan
+    return res
 
 def smoothing_sweeps_ndimage_generic_filter(radar, stat_function, pad=1,
                                             fields=None, fields_name_suffix='STAT',
@@ -13,18 +49,17 @@ def smoothing_sweeps_ndimage_generic_filter(radar, stat_function, pad=1,
         else:
             raise TypeError('"fields" must be a list.')
 
-    tmp_fields = []
-    for field in radar_fields:
-        out_field = f'{field}_{fields_name_suffix}'
-        if out_field in radar_fields:
-            tmp_fields += [field]
-        else:
-            continue
-    if len(tmp_fields) > 0:
-        radar_fields = tmp_fields
+    # skip fields whose smoothed output already exists on the radar
+    radar_fields = [
+        f for f in radar_fields
+        if f'{f}_{fields_name_suffix}' not in radar.fields
+    ]
 
     pad_size = 2 * pad + 1
     wind_size = (pad_size, pad_size)
+
+    nan_reduce = _VECTORIZED_STATS.get(stat_function)
+    vectorized = nan_reduce is not None and set(kwargs) <= {'min_gates'}
 
     nsweep = radar.nsweeps
     sweep_start = radar.sweep_start_ray_index['data']
@@ -50,6 +85,12 @@ def smoothing_sweeps_ndimage_generic_filter(radar, stat_function, pad=1,
             range_edge2 = tmp[:, -pad:] * np.nan
             tmp = np.concatenate((range_edge1, tmp, range_edge2), axis=1)
             tmp = np.concatenate((tmp[-pad:, :] , tmp, tmp[:pad, :]), axis=0)
+            if vectorized:
+                res_int = _windowed_stat_vectorized(
+                    tmp, pad, wind_size, nan_reduce,
+                    kwargs.get('min_gates', 0))
+                field_res[sweep_start[s]:(sweep_end[s] + 1), :] = res_int
+                continue
             res = ndi.generic_filter(tmp, stat_function, size=wind_size, extra_keywords=kwargs, mode='nearest')
             field_res[sweep_start[s]:(sweep_end[s] + 1), :] = res[pad:-pad, pad:-pad]
 
