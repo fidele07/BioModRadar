@@ -118,6 +118,19 @@ def _split_odim_file(path, radar, bio_mask, frac, stats, measure_bio):
                 sl = radar.get_slice(int(match[0]))
                 sweep_bio = bio_mask[sl]
                 sweep_frac = frac[sl]
+                # Py-ART does NOT preserve the file's ray order (measured:
+                # its rays start at -180 deg vs the file's 0 deg — a 180 deg
+                # rotation that scrambled every masked volume). Re-index
+                # the mask into ODIM row order via each ray's azimuth:
+                # ODIM rows are uniform in azimuth with row 0 at north.
+                nrays = sweep_bio.shape[0]
+                az = np.asarray(radar.azimuth['data'][sl]) % 360.0
+                rows = np.rint(az / (360.0 / nrays)).astype(int) % nrays
+                bio_f = np.zeros_like(sweep_bio)
+                frac_f = np.zeros_like(sweep_frac)
+                bio_f[rows] = sweep_bio
+                frac_f[rows] = sweep_frac
+                sweep_bio, sweep_frac = bio_f, frac_f
 
             for dname in sorted(k for k in h[name].keys()
                                 if k.startswith('data')):
