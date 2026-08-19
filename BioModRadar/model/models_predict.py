@@ -125,7 +125,7 @@ def predict_ML_models(radar, features, file_model, prob_thres=None):
 
     return radar_c
 
-def predict_ML_proba(radar, features, file_model):
+def predict_ML_proba(radar, features, file_model, fallback_raw=True):
     """Per-gate bird probability P(bird) for soft species assignment.
 
     Unlike ``predict_ML_models`` (hard 2-class output with an optional
@@ -133,6 +133,13 @@ def predict_ML_proba(radar, features, file_model):
     continuous P(bird) for every gate whose features are complete, and
     keeps NO confidence threshold: profiling must not discard biological
     signal, it splits it proportionally instead.
+
+    fallback_raw: the '*_MED' features are median-smoothed and need a
+    populated window (min_gates), so sparse echo — precisely the scans
+    where every gate counts — loses feature coverage (3-45% scored on
+    the validation suite). When True, a missing smoothed feature falls
+    back to the gate's RAW field value, trading a little smoothing for
+    scoring coverage. The scaler/model see the same feature space.
 
     Returns a masked array shaped like the radar sweeps: P(bird) in
     [0, 1]; masked where features are incomplete (caller decides the
@@ -148,9 +155,15 @@ def predict_ML_proba(radar, features, file_model):
             f"(got {type(model['model']).__name__})."
         )
     features = _align_features_order(features, model.get('features'))
-    data = np.array(
-        [radar.fields[f]['data'].filled(np.nan).ravel() for f in features]
-    ).T
+    cols = []
+    for f in features:
+        col = radar.fields[f]['data'].filled(np.nan).ravel()
+        raw_name = f[:-4] if f.endswith('_MED') else None
+        if fallback_raw and raw_name and raw_name in radar.fields:
+            raw = radar.fields[raw_name]['data'].filled(np.nan).ravel()
+            col = np.where(np.isnan(col), raw, col)
+        cols.append(col)
+    data = np.array(cols).T
     if model['scaler'] is not None:
         data = model['scaler'].transform(data)
 

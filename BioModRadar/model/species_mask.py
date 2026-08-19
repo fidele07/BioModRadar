@@ -84,7 +84,9 @@ def write_species_masked_volumes(
         'gates_scored': int(classified.sum()),
         'prior_p_bird': round(prior, 4),
         'eta_bio': 0.0, 'eta_bird': 0.0, 'eta_insect': 0.0,
-        'eta_bio_unmatched_sweeps': 0.0,
+        # ALL valid echo (weather included) on dropped duplicate/wrong
+        # sweeps - context, not lost biology (both pipelines drop them)
+        'eta_echo_dropped_sweeps': 0.0,
     }
     for species, dst, frac in (('bird', dst_bird, p),
                                ('insect', dst_insect, 1.0 - p)):
@@ -138,7 +140,7 @@ def _split_odim_file(path, radar, bio_mask, frac, stats, measure_bio):
                     if measure_bio and quantity == REFL_QUANTITY:
                         offset = float(grp['what'].attrs.get('offset', 0.0))
                         db = gain * arr[valid].astype('float64') + offset
-                        stats['eta_bio_unmatched_sweeps'] += float(
+                        stats['eta_echo_dropped_sweeps'] += float(
                             np.sum(10.0 ** (db / 10.0))
                         )
                     arr[:] = nodata
