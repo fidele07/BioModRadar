@@ -125,6 +125,45 @@ def predict_ML_models(radar, features, file_model, prob_thres=None):
 
     return radar_c
 
+def predict_ML_proba(radar, features, file_model):
+    """Per-gate bird probability P(bird) for soft species assignment.
+
+    Unlike ``predict_ML_models`` (hard 2-class output with an optional
+    confidence cut, meant for map display), this returns the classifier's
+    continuous P(bird) for every gate whose features are complete, and
+    keeps NO confidence threshold: profiling must not discard biological
+    signal, it splits it proportionally instead.
+
+    Returns a masked array shaped like the radar sweeps: P(bird) in
+    [0, 1]; masked where features are incomplete (caller decides the
+    prior for those gates).
+    """
+    if not os.path.exists(file_model):
+        raise FileNotFoundError('File containing the ML model not found.')
+
+    model = joblib.load(file_model)
+    if not hasattr(model['model'], 'predict_proba'):
+        raise TypeError(
+            'Soft species assignment requires a probabilistic model '
+            f"(got {type(model['model']).__name__})."
+        )
+    features = _align_features_order(features, model.get('features'))
+    data = np.array(
+        [radar.fields[f]['data'].filled(np.nan).ravel() for f in features]
+    ).T
+    if model['scaler'] is not None:
+        data = model['scaler'].transform(data)
+
+    p_bird = np.full(data.shape[0], np.nan)
+    mask = _mask_data_ML(data)
+    if np.any(mask):
+        proba = model['model'].predict_proba(data[mask])
+        classes = list(model['model'].classes_)
+        p_bird[mask] = proba[:, classes.index(1)]
+    p_bird = p_bird.reshape(radar.fields['DR']['data'].shape)
+    return np.ma.masked_invalid(p_bird)
+
+
 def _align_features_order(features, model_features):
     """Ensure the feature matrix columns match the training order.
 
