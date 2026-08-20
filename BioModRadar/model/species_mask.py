@@ -193,10 +193,13 @@ def _split_odim_file(path, radar, bio_mask, frac, stats, measure_bio):
                     grp['data'][...] = new
                 else:
                     # velocities are ensemble properties, not additive:
-                    # both species keep them where they keep the gate;
-                    # elsewhere velocity is UNKNOWN (nodata) — writing
-                    # undetect would poison the VVP fit with fake zeros
-                    arr[~keep] = nodata
+                    # BOTH volumes keep the FULL biological velocity
+                    # field. Restricting VRADH to each species' kept
+                    # gates left the VVP wind fit too few, azimuthally
+                    # uneven samples and it exploded (measured: ff up to
+                    # 118 m/s on the 2026-08-04 smoke test). Weather and
+                    # non-biological gates stay excluded (nodata).
+                    arr[~(sweep_bio & valid)] = nodata
                     grp['data'][...] = arr
     return eta_sum
 
